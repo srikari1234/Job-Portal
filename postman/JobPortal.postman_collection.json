@@ -1,0 +1,4027 @@
+{
+  "info": {
+    "_postman_id": "f4480ee3-2951-447f-8381-7d2809596bdc",
+    "name": "Job Portal Backend API",
+    "description": "Complete test suite for the Job Portal REST API (Node.js + Express + MongoDB).\n\nHOW TO RUN\n1. Start MongoDB and the API (`npm run seed` once, then `npm run dev`).\n2. Import this file into Postman.\n3. Open the collection > Variables and set `jwtSecret` to the JWT_SECRET from your .env (only needed by the 'Expired token' request) and check `adminEmail` / `adminPassword`.\n4. Click Run collection and run everything IN ORDER (folders 00 to 08). Authentication is an httpOnly cookie, which Postman's cookie jar stores and re-sends automatically; each folder starts by logging in as the role it needs.\n\nEvery request has automated tests (Tests tab).",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "00 - Health & Public",
+      "item": [
+        {
+          "name": "Health check",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Response has success = true\", function () { pm.expect(pm.response.json().success).to.eql(true); });",
+                  "pm.test(\"Database is connected\", function () { pm.expect(pm.response.json().database).to.eql(\"connected\"); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/health",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "health"
+              ]
+            },
+            "description": "Public. Confirms the API is up and MongoDB is connected."
+          },
+          "response": []
+        },
+        {
+          "name": "Unknown route returns 404",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 404\", function () { pm.response.to.have.status(404); });",
+                  "pm.test(\"Response has success = false\", function () { pm.expect(pm.response.json().success).to.eql(false); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/does-not-exist",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "does-not-exist"
+              ]
+            }
+          },
+          "response": []
+        }
+      ],
+      "description": "Public endpoints that need no login."
+    },
+    {
+      "name": "01 - Auth: Register & Login",
+      "item": [
+        {
+          "name": "Register Job Seeker (success)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set(\"runId\", Date.now().toString());"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 201\", function () { pm.response.to.have.status(201); });",
+                  "pm.test(\"Response has success = true\", function () { pm.expect(pm.response.json().success).to.eql(true); });",
+                  "pm.test(\"No password / hash / token is exposed in the response\", function () {\n    const text = pm.response.text().toLowerCase();\n    pm.expect(text).to.not.include('\"password\"');\n    pm.expect(text).to.not.include('$2a$');\n    pm.expect(text).to.not.include('$2b$');\n    pm.expect(text).to.not.include('\"token\"');\n});",
+                  "pm.test(\"Role is jobseeker\", function () { pm.expect(pm.response.json().data.user.role).to.eql(\"jobseeker\"); });",
+                  "pm.collectionVariables.set(\"jobSeekerId\", pm.response.json().data.user._id);",
+                  "pm.collectionVariables.set(\"seekerEmail\", pm.response.json().data.user.email);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/register",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "register"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Test Seeker\",\n  \"email\": \"seeker_{{runId}}@example.com\",\n  \"password\": \"{{testPassword}}\",\n  \"role\": \"jobseeker\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Public. Creates a Job Seeker. The password is hashed with bcrypt and never returned."
+          },
+          "response": []
+        },
+        {
+          "name": "Register Employer (success)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 201\", function () { pm.response.to.have.status(201); });",
+                  "pm.test(\"Response has success = true\", function () { pm.expect(pm.response.json().success).to.eql(true); });",
+                  "pm.test(\"No password / hash / token is exposed in the response\", function () {\n    const text = pm.response.text().toLowerCase();\n    pm.expect(text).to.not.include('\"password\"');\n    pm.expect(text).to.not.include('$2a$');\n    pm.expect(text).to.not.include('$2b$');\n    pm.expect(text).to.not.include('\"token\"');\n});",
+                  "pm.test(\"Role is employer\", function () { pm.expect(pm.response.json().data.user.role).to.eql(\"employer\"); });",
+                  "pm.collectionVariables.set(\"employerId\", pm.response.json().data.user._id);",
+                  "pm.collectionVariables.set(\"employerEmail\", pm.response.json().data.user.email);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/register",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "register"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Test Employer\",\n  \"email\": \"employer_{{runId}}@example.com\",\n  \"password\": \"{{testPassword}}\",\n  \"role\": \"employer\",\n  \"companyName\": \"Acme Tech\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Register - duplicate email (409)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 409\", function () { pm.response.to.have.status(409); });",
+                  "pm.test(\"Response has success = false\", function () { pm.expect(pm.response.json().success).to.eql(false); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/register",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "register"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Copy Cat\",\n  \"email\": \"seeker_{{runId}}@example.com\",\n  \"password\": \"{{testPassword}}\",\n  \"role\": \"jobseeker\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Register - invalid input (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 400\", function () { pm.response.to.have.status(400); });",
+                  "pm.test(\"Response has success = false\", function () { pm.expect(pm.response.json().success).to.eql(false); });",
+                  "pm.test(\"Validation errors are listed\", function () { const j = pm.response.json(); pm.expect(j.errors).to.be.an(\"array\").that.is.not.empty; });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/register",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "register"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"A\",\n  \"email\": \"not-an-email\",\n  \"password\": \"123\",\n  \"role\": \"jobseeker\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Validation: short name, bad email, weak password."
+          },
+          "response": []
+        },
+        {
+          "name": "Register - cannot self-register as admin (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 400\", function () { pm.response.to.have.status(400); });",
+                  "pm.test(\"Response has success = false\", function () { pm.expect(pm.response.json().success).to.eql(false); });",
+                  "pm.test(\"Validation errors are listed\", function () { const j = pm.response.json(); pm.expect(j.errors).to.be.an(\"array\").that.is.not.empty; });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/register",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "register"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Sneaky\",\n  \"email\": \"sneaky_{{runId}}@example.com\",\n  \"password\": \"{{testPassword}}\",\n  \"role\": \"admin\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Privilege-escalation test. Only jobseeker and employer are accepted."
+          },
+          "response": []
+        },
+        {
+          "name": "Login - wrong password (401)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 401\", function () { pm.response.to.have.status(401); });",
+                  "pm.test(\"Response has success = false\", function () { pm.expect(pm.response.json().success).to.eql(false); });",
+                  "pm.test(\"No cookie is set\", function () { pm.expect(pm.response.headers.get(\"Set-Cookie\")).to.be.oneOf([undefined, null]); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"seeker_{{runId}}@example.com\",\n  \"password\": \"Wrong@1234\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Login - missing fields (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 400\", function () { pm.response.to.have.status(400); });",
+                  "pm.test(\"Response has success = false\", function () { pm.expect(pm.response.json().success).to.eql(false); });",
+                  "pm.test(\"Validation errors are listed\", function () { const j = pm.response.json(); pm.expect(j.errors).to.be.an(\"array\").that.is.not.empty; });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"seeker_{{runId}}@example.com\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Login Job Seeker (success)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Response has success = true\", function () { pm.expect(pm.response.json().success).to.eql(true); });",
+                  "pm.test(\"JWT is set in an httpOnly cookie\", function () {\n    const sc = pm.response.headers.get('Set-Cookie') || '';\n    pm.expect(sc).to.include('token=');\n    pm.expect(sc.toLowerCase()).to.include('httponly');\n});",
+                  "pm.test(\"No password / hash / token is exposed in the response\", function () {\n    const text = pm.response.text().toLowerCase();\n    pm.expect(text).to.not.include('\"password\"');\n    pm.expect(text).to.not.include('$2a$');\n    pm.expect(text).to.not.include('$2b$');\n    pm.expect(text).to.not.include('\"token\"');\n});",
+                  "pm.test(\"Logged in as role jobseeker\", function () { pm.expect(pm.response.json().data.user.role).to.eql(\"jobseeker\"); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{seekerEmail}}\",\n  \"password\": \"{{testPassword}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Logs in as jobseeker. The JWT is stored in an httpOnly cookie, which Postman's cookie jar re-sends automatically on the next requests."
+          },
+          "response": []
+        },
+        {
+          "name": "Get current user - /auth/me",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Response has success = true\", function () { pm.expect(pm.response.json().success).to.eql(true); });",
+                  "pm.test(\"No password / hash / token is exposed in the response\", function () {\n    const text = pm.response.text().toLowerCase();\n    pm.expect(text).to.not.include('\"password\"');\n    pm.expect(text).to.not.include('$2a$');\n    pm.expect(text).to.not.include('$2b$');\n    pm.expect(text).to.not.include('\"token\"');\n});",
+                  "pm.test(\"Returns the logged in user\", function () { pm.expect(pm.response.json().data.user._id).to.eql(pm.collectionVariables.get(\"jobSeekerId\")); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "me"
+              ]
+            }
+          },
+          "response": []
+        }
+      ],
+      "description": "Registration, login, and the validation / security rules around them."
+    },
+    {
+      "name": "02 - No Auth & Invalid Token",
+      "item": [
+        {
+          "name": "Logout (clear any cookie left over from before)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Response has success = true\", function () { pm.expect(pm.response.json().success).to.eql(true); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/logout",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "logout"
+              ]
+            },
+            "description": "Makes sure the cookie jar is empty so the next requests are truly unauthenticated."
+          },
+          "response": []
+        },
+        {
+          "name": "Profile without login (401)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 401\", function () { pm.response.to.have.status(401); });",
+                  "pm.test(\"Response has success = false\", function () { pm.expect(pm.response.json().success).to.eql(false); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/users/profile",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "users",
+                "profile"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create job without login (401)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set(\"deadline\", new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString());"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 401\", function () { pm.response.to.have.status(401); });",
+                  "pm.test(\"Response has success = false\", function () { pm.expect(pm.response.json().success).to.eql(false); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/jobs",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "jobs"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Senior Node.js Developer\",\n  \"companyName\": \"Acme Tech\",\n  \"description\": \"Design, build and secure REST APIs using Node.js, Express and MongoDB for our platform.\",\n  \"location\": \"Hyderabad, India\",\n  \"employmentType\": \"full-time\",\n  \"salaryRange\": {\n    \"min\": 800000,\n    \"max\": 1500000,\n    \"currency\": \"INR\"\n  },\n  \"requiredSkills\": [\n    \"Node.js\",\n    \"Express\",\n    \"MongoDB\"\n  ],\n  \"experienceRequired\": {\n    \"min\": 2,\n    \"max\": 5\n  },\n  \"applicationDeadline\": \"{{deadline}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Apply for job without login (401)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 401\", function () { pm.response.to.have.status(401); });",
+                  "pm.test(\"Response has success = false\", function () { pm.expect(pm.response.json().success).to.eql(false); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/jobs/000000000000000000000000/apply",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "jobs",
+                "000000000000000000000000",
+                "apply"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "My applications without login (401)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 401\", function () { pm.response.to.have.status(401); });",
+                  "pm.test(\"Response has success = false\", function () { pm.expect(pm.response.json().success).to.eql(false); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/applications/my",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "applications",
+                "my"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Admin route without login (401)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 401\", function () { pm.response.to.have.status(401); });",
+                  "pm.test(\"Response has success = false\", function () { pm.expect(pm.response.json().success).to.eql(false); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/users",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "users"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Invalid token (401)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 401\", function () { pm.response.to.have.status(401); });",
+                  "pm.test(\"Response has success = false\", function () { pm.expect(pm.response.json().success).to.eql(false); });",
+                  "pm.test(\"Message matches /invalid/\", function () { pm.expect(pm.response.json().message).to.match(/invalid/i); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "token=this.is.not.a.valid.jwt"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/users/profile",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "users",
+                "profile"
+              ]
+            },
+            "description": "Sends a garbage JWT in the cookie header."
+          },
+          "response": []
+        },
+        {
+          "name": "Expired token (401)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const secret = pm.variables.get(\"jwtSecret\");",
+                  "const b64url = (s) => CryptoJS.enc.Base64.stringify(CryptoJS.enc.Utf8.parse(s)).replace(/=+$/, '').replace(/\\+/g, '-').replace(/\\//g, '_');",
+                  "const header = b64url(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));",
+                  "const now = Math.floor(Date.now() / 1000);",
+                  "const payload = b64url(JSON.stringify({ id: pm.variables.get('jobSeekerId'), iat: now - 7200, exp: now - 3600 }));",
+                  "const sig = CryptoJS.enc.Base64.stringify(CryptoJS.HmacSHA256(header + '.' + payload, secret)).replace(/=+$/, '').replace(/\\+/g, '-').replace(/\\//g, '_');",
+                  "pm.request.headers.upsert({ key: 'Cookie', value: 'token=' + header + '.' + payload + '.' + sig });"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 401\", function () { pm.response.to.have.status(401); });",
+                  "pm.test(\"Response has success = false\", function () { pm.expect(pm.response.json().success).to.eql(false); });",
+                  "pm.test(\"Message matches /expired/\", function () { pm.expect(pm.response.json().message).to.match(/expired/i); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/users/profile",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "users",
+                "profile"
+              ]
+            },
+            "description": "Needs the collection variable `jwtSecret` to equal JWT_SECRET in your .env. The script signs a token that expired an hour ago."
+          },
+          "response": []
+        },
+        {
+          "name": "Public: list jobs without login (200)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Response has success = true\", function () { pm.expect(pm.response.json().success).to.eql(true); });",
+                  "pm.test(\"jobs is an array\", function () { pm.expect(pm.response.json().data.jobs).to.be.an(\"array\"); });",
+                  "pm.test(\"Pagination info is present\", function () { pm.expect(pm.response.json().pagination).to.have.property(\"total\"); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/jobs",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "jobs"
+              ]
+            }
+          },
+          "response": []
+        }
+      ],
+      "description": "Requests that must be rejected because there is no cookie, or the cookie is bad."
+    },
+    {
+      "name": "03 - Employer: Job CRUD",
+      "item": [
+        {
+          "name": "Login Employer",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Response has success = true\", function () { pm.expect(pm.response.json().success).to.eql(true); });",
+                  "pm.test(\"JWT is set in an httpOnly cookie\", function () {\n    const sc = pm.response.headers.get('Set-Cookie') || '';\n    pm.expect(sc).to.include('token=');\n    pm.expect(sc.toLowerCase()).to.include('httponly');\n});",
+                  "pm.test(\"No password / hash / token is exposed in the response\", function () {\n    const text = pm.response.text().toLowerCase();\n    pm.expect(text).to.not.include('\"password\"');\n    pm.expect(text).to.not.include('$2a$');\n    pm.expect(text).to.not.include('$2b$');\n    pm.expect(text).to.not.include('\"token\"');\n});",
+                  "pm.test(\"Logged in as role employer\", function () { pm.expect(pm.response.json().data.user.role).to.eql(\"employer\"); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{employerEmail}}\",\n  \"password\": \"{{testPassword}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Logs in as employer. The JWT is stored in an httpOnly cookie, which Postman's cookie jar re-sends automatically on the next requests."
+          },
+          "response": []
+        },
+        {
+          "name": "Create job (success)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set(\"deadline\", new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString());"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 201\", function () { pm.response.to.have.status(201); });",
+                  "pm.test(\"Response has success = true\", function () { pm.expect(pm.response.json().success).to.eql(true); });",
+                  "pm.test(\"Job belongs to the logged in employer\", function () { pm.expect(pm.response.json().data.job.employer).to.eql(pm.collectionVariables.get(\"employerId\")); });",
+                  "pm.test(\"Skills are normalised to lower case\", function () { pm.expect(pm.response.json().data.job.requiredSkills).to.include(\"node.js\"); });",
+                  "pm.test(\"Status defaults to open\", function () { pm.expect(pm.response.json().data.job.status).to.eql(\"open\"); });",
+                  "pm.collectionVariables.set(\"jobId\", pm.response.json().data.job._id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/jobs",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "jobs"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Senior Node.js Developer\",\n  \"companyName\": \"Acme Tech\",\n  \"description\": \"Design, build and secure REST APIs using Node.js, Express and MongoDB for our platform.\",\n  \"location\": \"Hyderabad, India\",\n  \"employmentType\": \"full-time\",\n  \"salaryRange\": {\n    \"min\": 800000,\n    \"max\": 1500000,\n    \"currency\": \"INR\"\n  },\n  \"requiredSkills\": [\n    \"Node.js\",\n    \"Express\",\n    \"MongoDB\"\n  ],\n  \"experienceRequired\": {\n    \"min\": 2,\n    \"max\": 5\n  },\n  \"applicationDeadline\": \"{{deadline}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create job - invalid input (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 400\", function () { pm.response.to.have.status(400); });",
+                  "pm.test(\"Response has success = false\", function () { pm.expect(pm.response.json().success).to.eql(false); });",
+                  "pm.test(\"Validation errors are listed\", function () { const j = pm.response.json(); pm.expect(j.errors).to.be.an(\"array\").that.is.not.empty; });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/jobs",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "jobs"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"QA\",\n  \"companyName\": \"Acme\",\n  \"description\": \"short\",\n  \"location\": \"X\",\n  \"employmentType\": \"weekend-only\",\n  \"salaryRange\": {\n    \"min\": 500000,\n    \"max\": 100000\n  },\n  \"requiredSkills\": [],\n  \"applicationDeadline\": \"2020-01-01\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Bad title/description/location, unknown employment type, salary max < min, empty skills, deadline in the past."
+          },
+          "response": []
+        },
+        {
+          "name": "Create second job (deleted later)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set(\"deadline\", new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString());"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 201\", function () { pm.response.to.have.status(201); });",
+                  "pm.test(\"Response has success = true\", function () { pm.expect(pm.response.json().success).to.eql(true); });",
+                  "pm.collectionVariables.set(\"tempJobId\", pm.response.json().data.job._id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/jobs",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "jobs"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Temporary Test Job\",\n  \"companyName\": \"Acme Tech\",\n  \"description\": \"Design, build and secure REST APIs using Node.js, Express and MongoDB for our platform.\",\n  \"location\": \"Hyderabad, India\",\n  \"employmentType\": \"full-time\",\n  \"salaryRange\": {\n    \"min\": 800000,\n    \"max\": 1500000,\n    \"currency\": \"INR\"\n  },\n  \"requiredSkills\": [\n    \"Node.js\",\n    \"Express\",\n    \"MongoDB\"\n  ],\n  \"experienceRequired\": {\n    \"min\": 2,\n    \"max\": 5\n  },\n  \"applicationDeadline\": \"{{deadline}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "View my jobs",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Response has success = true\", function () { pm.expect(pm.response.json().success).to.eql(true); });",
+                  "pm.test(\"Contains the job I created\", function () { const ids = pm.response.json().data.jobs.map(j => j._id); pm.expect(ids).to.include(pm.collectionVariables.get(\"jobId\")); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/jobs/my",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "jobs",
+                "my"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "View a specific job",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Response has success = true\", function () { pm.expect(pm.response.json().success).to.eql(true); });",
+                  "pm.test(\"Employer info is public-safe (no email)\", function () { const e = pm.response.json().data.job.employer; pm.expect(e).to.not.have.property(\"email\"); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/jobs/{{jobId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "jobs",
+                "{{jobId}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "View job - malformed id (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 400\", function () { pm.response.to.have.status(400); });",
+                  "pm.test(\"Response has success = false\", function () { pm.expect(pm.response.json().success).to.eql(false); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/jobs/123",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "jobs",
+                "123"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "View job - id not found (404)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 404\", function () { pm.response.to.have.status(404); });",
+                  "pm.test(\"Response has success = false\", function () { pm.expect(pm.response.json().success).to.eql(false); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/jobs/000000000000000000000000",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "jobs",
+                "000000000000000000000000"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update my job (success)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Response has success = true\", function () { pm.expect(pm.response.json().success).to.eql(true); });",
+                  "pm.test(\"Title was updated\", function () { pm.expect(pm.response.json().data.job.title).to.include(\"Updated\"); });",
+                  "pm.test(\"Salary was updated\", function () { pm.expect(pm.response.json().data.job.salaryRange.max).to.eql(1600000); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/jobs/{{jobId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "jobs",
+                "{{jobId}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Senior Node.js Developer (Updated)\",\n  \"salaryRange\": {\n    \"min\": 900000,\n    \"max\": 1600000,\n    \"currency\": \"INR\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update job - invalid data (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 400\", function () { pm.response.to.have.status(400); });",
+                  "pm.test(\"Response has success = false\", function () { pm.expect(pm.response.json().success).to.eql(false); });",
+                  "pm.test(\"Validation errors are listed\", function () { const j = pm.response.json(); pm.expect(j.errors).to.be.an(\"array\").that.is.not.empty; });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/jobs/{{jobId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "jobs",
+                "{{jobId}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"employmentType\": \"nope\",\n  \"salaryRange\": {\n    \"min\": 10,\n    \"max\": 5\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete my job (success)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Response has success = true\", function () { pm.expect(pm.response.json().success).to.eql(true); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/jobs/{{tempJobId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "jobs",
+                "{{tempJobId}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Deleted job is gone (404)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 404\", function () { pm.response.to.have.status(404); });",
+                  "pm.test(\"Response has success = false\", function () { pm.expect(pm.response.json().success).to.eql(false); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/jobs/{{tempJobId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "jobs",
+                "{{tempJobId}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Employer cannot apply for jobs (403)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 403\", function () { pm.response.to.have.status(403); });",
+                  "pm.test(\"Response has success = false\", function () { pm.expect(pm.response.json().success).to.eql(false); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/jobs/{{jobId}}/apply",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "jobs",
+                "{{jobId}}",
+                "apply"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Employer cannot use admin routes (403)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 403\", function () { pm.response.to.have.status(403); });",
+                  "pm.test(\"Response has success = false\", function () { pm.expect(pm.response.json().success).to.eql(false); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/users",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "users"
+              ]
+            }
+          },
+          "response": []
+        }
+      ],
+      "description": "Logged in as an Employer: create, read, update and delete job postings."
+    },
+    {
+      "name": "04 - Job Seeker: Profile, Jobs & Apply",
+      "item": [
+        {
+          "name": "Login Job Seeker",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Response has success = true\", function () { pm.expect(pm.response.json().success).to.eql(true); });",
+                  "pm.test(\"JWT is set in an httpOnly cookie\", function () {\n    const sc = pm.response.headers.get('Set-Cookie') || '';\n    pm.expect(sc).to.include('token=');\n    pm.expect(sc.toLowerCase()).to.include('httponly');\n});",
+                  "pm.test(\"No password / hash / token is exposed in the response\", function () {\n    const text = pm.response.text().toLowerCase();\n    pm.expect(text).to.not.include('\"password\"');\n    pm.expect(text).to.not.include('$2a$');\n    pm.expect(text).to.not.include('$2b$');\n    pm.expect(text).to.not.include('\"token\"');\n});",
+                  "pm.test(\"Logged in as role jobseeker\", function () { pm.expect(pm.response.json().data.user.role).to.eql(\"jobseeker\"); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{seekerEmail}}\",\n  \"password\": \"{{testPassword}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Logs in as jobseeker. The JWT is stored in an httpOnly cookie, which Postman's cookie jar re-sends automatically on the next requests."
+          },
+          "response": []
+        },
+        {
+          "name": "View own profile",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Response has success = true\", function () { pm.expect(pm.response.json().success).to.eql(true); });",
+                  "pm.test(\"No password / hash / token is exposed in the response\", function () {\n    const text = pm.response.text().toLowerCase();\n    pm.expect(text).to.not.include('\"password\"');\n    pm.expect(text).to.not.include('$2a$');\n    pm.expect(text).to.not.include('$2b$');\n    pm.expect(text).to.not.include('\"token\"');\n});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/users/profile",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "users",
+                "profile"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update profile: skills, experience, education (embedded data)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Response has success = true\", function () { pm.expect(pm.response.json().success).to.eql(true); });",
+                  "pm.test(\"No password / hash / token is exposed in the response\", function () {\n    const text = pm.response.text().toLowerCase();\n    pm.expect(text).to.not.include('\"password\"');\n    pm.expect(text).to.not.include('$2a$');\n    pm.expect(text).to.not.include('$2b$');\n    pm.expect(text).to.not.include('\"token\"');\n});",
+                  "pm.test(\"Skills are lower-cased and de-duplicated\", function () { pm.expect(pm.response.json().data.user.skills).to.eql([\"javascript\", \"node.js\", \"mongodb\"]); });",
+                  "pm.test(\"Embedded experience saved\", function () { pm.expect(pm.response.json().data.user.experience).to.have.lengthOf(1); });",
+                  "pm.test(\"Embedded education saved\", function () { pm.expect(pm.response.json().data.user.education[0].institution).to.eql(\"JNTU Hyderabad\"); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/users/profile",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "users",
+                "profile"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Test Seeker Updated\",\n  \"phone\": \"+91 9876543210\",\n  \"headline\": \"Backend developer\",\n  \"skills\": [\n    \"JavaScript\",\n    \"Node.js\",\n    \"MongoDB\",\n    \"node.js\"\n  ],\n  \"experience\": [\n    {\n      \"jobTitle\": \"Junior Developer\",\n      \"company\": \"CodeCraft\",\n      \"startDate\": \"2023-06-01\",\n      \"endDate\": \"2025-05-31\",\n      \"description\": \"Built REST APIs\"\n    }\n  ],\n  \"education\": [\n    {\n      \"degree\": \"B.Tech\",\n      \"institution\": \"JNTU Hyderabad\",\n      \"fieldOfStudy\": \"Computer Science\",\n      \"startYear\": 2019,\n      \"endYear\": 2023\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update profile - invalid input (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 400\", function () { pm.response.to.have.status(400); });",
+                  "pm.test(\"Response has success = false\", function () { pm.expect(pm.response.json().success).to.eql(false); });",
+                  "pm.test(\"Validation errors are listed\", function () { const j = pm.response.json(); pm.expect(j.errors).to.be.an(\"array\").that.is.not.empty; });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/users/profile",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "users",
+                "profile"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone\": \"abc\",\n  \"education\": [\n    {\n      \"degree\": \"B.Tech\"\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update profile - cannot change role or email",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Response has success = true\", function () { pm.expect(pm.response.json().success).to.eql(true); });",
+                  "pm.test(\"Role is unchanged (mass-assignment blocked)\", function () { pm.expect(pm.response.json().data.user.role).to.eql(\"jobseeker\"); });",
+                  "pm.test(\"Email is unchanged\", function () { pm.expect(pm.response.json().data.user.email).to.eql(pm.collectionVariables.get(\"seekerEmail\")); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/users/profile",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "users",
+                "profile"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Still A Seeker\",\n  \"role\": \"admin\",\n  \"email\": \"hacker@evil.com\",\n  \"isActive\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Sends role/email fields that are not allowed. They are stripped by validation and ignored."
+          },
+          "response": []
+        },
+        {
+          "name": "View all jobs",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Response has success = true\", function () { pm.expect(pm.response.json().success).to.eql(true); });",
+                  "pm.test(\"Employer job is listed\", function () { const ids = pm.response.json().data.jobs.map(j => j._id); pm.expect(ids).to.include(pm.collectionVariables.get(\"jobId\")); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/jobs",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "jobs"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "View jobs with filters (search, type, skills, pagination)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Response has success = true\", function () { pm.expect(pm.response.json().success).to.eql(true); });",
+                  "pm.test(\"Limit is respected\", function () { pm.expect(pm.response.json().pagination.limit).to.eql(5); });",
+                  "pm.test(\"All results are full-time\", function () { pm.response.json().data.jobs.forEach(j => pm.expect(j.employmentType).to.eql(\"full-time\")); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/jobs?search=node&employmentType=full-time&skills=mongodb&location=hyderabad&page=1&limit=5&sort=newest",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "jobs"
+              ],
+              "query": [
+                {
+                  "key": "search",
+                  "value": "node"
+                },
+                {
+                  "key": "employmentType",
+                  "value": "full-time"
+                },
+                {
+                  "key": "skills",
+                  "value": "mongodb"
+                },
+                {
+                  "key": "location",
+                  "value": "hyderabad"
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "5"
+                },
+                {
+                  "key": "sort",
+                  "value": "newest"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "View single job by ID",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Response has success = true\", function () { pm.expect(pm.response.json().success).to.eql(true); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/jobs/{{jobId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "jobs",
+                "{{jobId}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Job seeker cannot create job (403)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set(\"deadline\", new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString());"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 403\", function () { pm.response.to.have.status(403); });",
+                  "pm.test(\"Response has success = false\", function () { pm.expect(pm.response.json().success).to.eql(false); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/jobs",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "jobs"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Senior Node.js Developer\",\n  \"companyName\": \"Acme Tech\",\n  \"description\": \"Design, build and secure REST APIs using Node.js, Express and MongoDB for our platform.\",\n  \"location\": \"Hyderabad, India\",\n  \"employmentType\": \"full-time\",\n  \"salaryRange\": {\n    \"min\": 800000,\n    \"max\": 1500000,\n    \"currency\": \"INR\"\n  },\n  \"requiredSkills\": [\n    \"Node.js\",\n    \"Express\",\n    \"MongoDB\"\n  ],\n  \"experienceRequired\": {\n    \"min\": 2,\n    \"max\": 5\n  },\n  \"applicationDeadline\": \"{{deadline}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Job seeker cannot update job (403)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 403\", function () { pm.response.to.have.status(403); });",
+                  "pm.test(\"Response has success = false\", function () { pm.expect(pm.response.json().success).to.eql(false); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/jobs/{{jobId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "jobs",
+                "{{jobId}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Hacked title\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Job seeker cannot delete job (403)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 403\", function () { pm.response.to.have.status(403); });",
+                  "pm.test(\"Response has success = false\", function () { pm.expect(pm.response.json().success).to.eql(false); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/jobs/{{jobId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "jobs",
+                "{{jobId}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Job seeker cannot view a job's applications (403)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 403\", function () { pm.response.to.have.status(403); });",
+                  "pm.test(\"Response has success = false\", function () { pm.expect(pm.response.json().success).to.eql(false); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/jobs/{{jobId}}/applications",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "jobs",
+                "{{jobId}}",
+                "applications"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Job seeker cannot use admin routes (403)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 403\", function () { pm.response.to.have.status(403); });",
+                  "pm.test(\"Response has success = false\", function () { pm.expect(pm.response.json().success).to.eql(false); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/users",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "users"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Apply for job - invalid resume URL (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 400\", function () { pm.response.to.have.status(400); });",
+                  "pm.test(\"Response has success = false\", function () { pm.expect(pm.response.json().success).to.eql(false); });",
+                  "pm.test(\"Validation errors are listed\", function () { const j = pm.response.json(); pm.expect(j.errors).to.be.an(\"array\").that.is.not.empty; });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/jobs/{{jobId}}/apply",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "jobs",
+                "{{jobId}}",
+                "apply"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"coverLetter\": \"Hello\",\n  \"resumeUrl\": \"not a url\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Apply for job (success)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 201\", function () { pm.response.to.have.status(201); });",
+                  "pm.test(\"Response has success = true\", function () { pm.expect(pm.response.json().success).to.eql(true); });",
+                  "pm.test(\"Initial status is applied\", function () { pm.expect(pm.response.json().data.application.status).to.eql(\"applied\"); });",
+                  "pm.test(\"Application is linked to me and the job\", function () { const a = pm.response.json().data.application; pm.expect(a.applicant).to.eql(pm.collectionVariables.get(\"jobSeekerId\")); pm.expect(a.job).to.eql(pm.collectionVariables.get(\"jobId\")); });",
+                  "pm.test(\"Status history has one entry\", function () { pm.expect(pm.response.json().data.application.statusHistory).to.have.lengthOf(1); });",
+                  "pm.collectionVariables.set(\"applicationId\", pm.response.json().data.application._id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/jobs/{{jobId}}/apply",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "jobs",
+                "{{jobId}}",
+                "apply"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"coverLetter\": \"I have 2 years of Node.js experience and would love to join.\",\n  \"resumeUrl\": \"https://example.com/resume/test-seeker.pdf\",\n  \"expectedSalary\": 1000000\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Apply for the same job again (409)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 409\", function () { pm.response.to.have.status(409); });",
+                  "pm.test(\"Response has success = false\", function () { pm.expect(pm.response.json().success).to.eql(false); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/jobs/{{jobId}}/apply",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "jobs",
+                "{{jobId}}",
+                "apply"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"coverLetter\": \"Trying twice\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Apply for a job that does not exist (404)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 404\", function () { pm.response.to.have.status(404); });",
+                  "pm.test(\"Response has success = false\", function () { pm.expect(pm.response.json().success).to.eql(false); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/jobs/000000000000000000000000/apply",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "jobs",
+                "000000000000000000000000",
+                "apply"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "View my submitted applications",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Response has success = true\", function () { pm.expect(pm.response.json().success).to.eql(true); });",
+                  "pm.test(\"Contains my application with job details\", function () { const a = pm.response.json().data.applications.find(x => x._id === pm.collectionVariables.get(\"applicationId\")); pm.expect(a).to.exist; pm.expect(a.job).to.have.property(\"title\"); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/applications/my",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "applications",
+                "my"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "View the status of one application",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Response has success = true\", function () { pm.expect(pm.response.json().success).to.eql(true); });",
+                  "pm.test(\"Status is applied\", function () { pm.expect(pm.response.json().data.application.status).to.eql(\"applied\"); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/applications/{{applicationId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "applications",
+                "{{applicationId}}"
+              ]
+            }
+          },
+          "response": []
+        }
+      ],
+      "description": "Logged in as a Job Seeker: profile with embedded data, browse jobs, apply, track applications, and blocked actions."
+    },
+    {
+      "name": "05 - Employer: Applications & Ownership",
+      "item": [
+        {
+          "name": "Login Employer (owner)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Response has success = true\", function () { pm.expect(pm.response.json().success).to.eql(true); });",
+                  "pm.test(\"JWT is set in an httpOnly cookie\", function () {\n    const sc = pm.response.headers.get('Set-Cookie') || '';\n    pm.expect(sc).to.include('token=');\n    pm.expect(sc.toLowerCase()).to.include('httponly');\n});",
+                  "pm.test(\"No password / hash / token is exposed in the response\", function () {\n    const text = pm.response.text().toLowerCase();\n    pm.expect(text).to.not.include('\"password\"');\n    pm.expect(text).to.not.include('$2a$');\n    pm.expect(text).to.not.include('$2b$');\n    pm.expect(text).to.not.include('\"token\"');\n});",
+                  "pm.test(\"Logged in as role employer\", function () { pm.expect(pm.response.json().data.user.role).to.eql(\"employer\"); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{employerEmail}}\",\n  \"password\": \"{{testPassword}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Logs in as employer. The JWT is stored in an httpOnly cookie, which Postman's cookie jar re-sends automatically on the next requests."
+          },
+          "response": []
+        },
+        {
+          "name": "View applications for my job",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Response has success = true\", function () { pm.expect(pm.response.json().success).to.eql(true); });",
+                  "pm.test(\"No password / hash / token is exposed in the response\", function () {\n    const text = pm.response.text().toLowerCase();\n    pm.expect(text).to.not.include('\"password\"');\n    pm.expect(text).to.not.include('$2a$');\n    pm.expect(text).to.not.include('$2b$');\n    pm.expect(text).to.not.include('\"token\"');\n});",
+                  "pm.test(\"Shows the applicant profile\", function () { const a = pm.response.json().data.applications.find(x => x._id === pm.collectionVariables.get(\"applicationId\")); pm.expect(a).to.exist; pm.expect(a.applicant).to.have.property(\"name\"); pm.expect(a.applicant).to.have.property(\"skills\"); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/jobs/{{jobId}}/applications",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "jobs",
+                "{{jobId}}",
+                "applications"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update application status to shortlisted",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Response has success = true\", function () { pm.expect(pm.response.json().success).to.eql(true); });",
+                  "pm.test(\"Status is shortlisted\", function () { pm.expect(pm.response.json().data.application.status).to.eql(\"shortlisted\"); });",
+                  "pm.test(\"History now has two entries\", function () { pm.expect(pm.response.json().data.application.statusHistory).to.have.lengthOf(2); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/applications/{{applicationId}}/status",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "applications",
+                "{{applicationId}}",
+                "status"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"shortlisted\",\n  \"note\": \"Strong Node.js background\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update application status - invalid value (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 400\", function () { pm.response.to.have.status(400); });",
+                  "pm.test(\"Response has success = false\", function () { pm.expect(pm.response.json().success).to.eql(false); });",
+                  "pm.test(\"Validation errors are listed\", function () { const j = pm.response.json(); pm.expect(j.errors).to.be.an(\"array\").that.is.not.empty; });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/applications/{{applicationId}}/status",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "applications",
+                "{{applicationId}}",
+                "status"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"maybe-later\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Register a second Employer",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 201\", function () { pm.response.to.have.status(201); });",
+                  "pm.test(\"Response has success = true\", function () { pm.expect(pm.response.json().success).to.eql(true); });",
+                  "pm.collectionVariables.set(\"employer2Id\", pm.response.json().data.user._id);",
+                  "pm.collectionVariables.set(\"employer2Email\", pm.response.json().data.user.email);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/register",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "register"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Other Employer\",\n  \"email\": \"employer2_{{runId}}@example.com\",\n  \"password\": \"{{testPassword}}\",\n  \"role\": \"employer\",\n  \"companyName\": \"Other Corp\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Login second Employer",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Response has success = true\", function () { pm.expect(pm.response.json().success).to.eql(true); });",
+                  "pm.test(\"JWT is set in an httpOnly cookie\", function () {\n    const sc = pm.response.headers.get('Set-Cookie') || '';\n    pm.expect(sc).to.include('token=');\n    pm.expect(sc.toLowerCase()).to.include('httponly');\n});",
+                  "pm.test(\"No password / hash / token is exposed in the response\", function () {\n    const text = pm.response.text().toLowerCase();\n    pm.expect(text).to.not.include('\"password\"');\n    pm.expect(text).to.not.include('$2a$');\n    pm.expect(text).to.not.include('$2b$');\n    pm.expect(text).to.not.include('\"token\"');\n});",
+                  "pm.test(\"Logged in as role employer\", function () { pm.expect(pm.response.json().data.user.role).to.eql(\"employer\"); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{employer2Email}}\",\n  \"password\": \"{{testPassword}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Logs in as employer. The JWT is stored in an httpOnly cookie, which Postman's cookie jar re-sends automatically on the next requests."
+          },
+          "response": []
+        },
+        {
+          "name": "Employer #2 cannot update Employer #1's job (403)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 403\", function () { pm.response.to.have.status(403); });",
+                  "pm.test(\"Response has success = false\", function () { pm.expect(pm.response.json().success).to.eql(false); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/jobs/{{jobId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "jobs",
+                "{{jobId}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Stolen job\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Employer #2 cannot delete Employer #1's job (403)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 403\", function () { pm.response.to.have.status(403); });",
+                  "pm.test(\"Response has success = false\", function () { pm.expect(pm.response.json().success).to.eql(false); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/jobs/{{jobId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "jobs",
+                "{{jobId}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Employer #2 cannot view Employer #1's applications (403)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 403\", function () { pm.response.to.have.status(403); });",
+                  "pm.test(\"Response has success = false\", function () { pm.expect(pm.response.json().success).to.eql(false); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/jobs/{{jobId}}/applications",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "jobs",
+                "{{jobId}}",
+                "applications"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Employer #2 cannot change application status (403)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 403\", function () { pm.response.to.have.status(403); });",
+                  "pm.test(\"Response has success = false\", function () { pm.expect(pm.response.json().success).to.eql(false); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/applications/{{applicationId}}/status",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "applications",
+                "{{applicationId}}",
+                "status"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"rejected\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Employer #2 cannot read the application (403)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 403\", function () { pm.response.to.have.status(403); });",
+                  "pm.test(\"Response has success = false\", function () { pm.expect(pm.response.json().success).to.eql(false); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/applications/{{applicationId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "applications",
+                "{{applicationId}}"
+              ]
+            }
+          },
+          "response": []
+        }
+      ],
+      "description": "Employers can only touch their own jobs and the applications for those jobs."
+    },
+    {
+      "name": "06 - Job Seeker: Status & Privacy",
+      "item": [
+        {
+          "name": "Login Job Seeker",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Response has success = true\", function () { pm.expect(pm.response.json().success).to.eql(true); });",
+                  "pm.test(\"JWT is set in an httpOnly cookie\", function () {\n    const sc = pm.response.headers.get('Set-Cookie') || '';\n    pm.expect(sc).to.include('token=');\n    pm.expect(sc.toLowerCase()).to.include('httponly');\n});",
+                  "pm.test(\"No password / hash / token is exposed in the response\", function () {\n    const text = pm.response.text().toLowerCase();\n    pm.expect(text).to.not.include('\"password\"');\n    pm.expect(text).to.not.include('$2a$');\n    pm.expect(text).to.not.include('$2b$');\n    pm.expect(text).to.not.include('\"token\"');\n});",
+                  "pm.test(\"Logged in as role jobseeker\", function () { pm.expect(pm.response.json().data.user.role).to.eql(\"jobseeker\"); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{seekerEmail}}\",\n  \"password\": \"{{testPassword}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Logs in as jobseeker. The JWT is stored in an httpOnly cookie, which Postman's cookie jar re-sends automatically on the next requests."
+          },
+          "response": []
+        },
+        {
+          "name": "Seeker sees the new status",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Response has success = true\", function () { pm.expect(pm.response.json().success).to.eql(true); });",
+                  "pm.test(\"Status is shortlisted\", function () { pm.expect(pm.response.json().data.application.status).to.eql(\"shortlisted\"); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/applications/{{applicationId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "applications",
+                "{{applicationId}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Seeker cannot change application status (403)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 403\", function () { pm.response.to.have.status(403); });",
+                  "pm.test(\"Response has success = false\", function () { pm.expect(pm.response.json().success).to.eql(false); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/applications/{{applicationId}}/status",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "applications",
+                "{{applicationId}}",
+                "status"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"hired\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Register a second Job Seeker",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 201\", function () { pm.response.to.have.status(201); });",
+                  "pm.test(\"Response has success = true\", function () { pm.expect(pm.response.json().success).to.eql(true); });",
+                  "pm.collectionVariables.set(\"jobSeeker2Id\", pm.response.json().data.user._id);",
+                  "pm.collectionVariables.set(\"seeker2Email\", pm.response.json().data.user.email);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/register",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "register"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Other Seeker\",\n  \"email\": \"seeker2_{{runId}}@example.com\",\n  \"password\": \"{{testPassword}}\",\n  \"role\": \"jobseeker\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Login second Job Seeker",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Response has success = true\", function () { pm.expect(pm.response.json().success).to.eql(true); });",
+                  "pm.test(\"JWT is set in an httpOnly cookie\", function () {\n    const sc = pm.response.headers.get('Set-Cookie') || '';\n    pm.expect(sc).to.include('token=');\n    pm.expect(sc.toLowerCase()).to.include('httponly');\n});",
+                  "pm.test(\"No password / hash / token is exposed in the response\", function () {\n    const text = pm.response.text().toLowerCase();\n    pm.expect(text).to.not.include('\"password\"');\n    pm.expect(text).to.not.include('$2a$');\n    pm.expect(text).to.not.include('$2b$');\n    pm.expect(text).to.not.include('\"token\"');\n});",
+                  "pm.test(\"Logged in as role jobseeker\", function () { pm.expect(pm.response.json().data.user.role).to.eql(\"jobseeker\"); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{seeker2Email}}\",\n  \"password\": \"{{testPassword}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Logs in as jobseeker. The JWT is stored in an httpOnly cookie, which Postman's cookie jar re-sends automatically on the next requests."
+          },
+          "response": []
+        },
+        {
+          "name": "Seeker #2 cannot see Seeker #1's application (403)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 403\", function () { pm.response.to.have.status(403); });",
+                  "pm.test(\"Response has success = false\", function () { pm.expect(pm.response.json().success).to.eql(false); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/applications/{{applicationId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "applications",
+                "{{applicationId}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Seeker #2's own application list is empty",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Response has success = true\", function () { pm.expect(pm.response.json().success).to.eql(true); });",
+                  "pm.test(\"Does not contain the other seeker's application\", function () { const ids = pm.response.json().data.applications.map(a => a._id); pm.expect(ids).to.not.include(pm.collectionVariables.get(\"applicationId\")); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/applications/my",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "applications",
+                "my"
+              ]
+            }
+          },
+          "response": []
+        }
+      ],
+      "description": "A Job Seeker can never read or manage another user's private applications."
+    },
+    {
+      "name": "07 - Admin",
+      "item": [
+        {
+          "name": "Login Admin",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Response has success = true\", function () { pm.expect(pm.response.json().success).to.eql(true); });",
+                  "pm.test(\"JWT is set in an httpOnly cookie\", function () {\n    const sc = pm.response.headers.get('Set-Cookie') || '';\n    pm.expect(sc).to.include('token=');\n    pm.expect(sc.toLowerCase()).to.include('httponly');\n});",
+                  "pm.test(\"No password / hash / token is exposed in the response\", function () {\n    const text = pm.response.text().toLowerCase();\n    pm.expect(text).to.not.include('\"password\"');\n    pm.expect(text).to.not.include('$2a$');\n    pm.expect(text).to.not.include('$2b$');\n    pm.expect(text).to.not.include('\"token\"');\n});",
+                  "pm.test(\"Logged in as role admin\", function () { pm.expect(pm.response.json().data.user.role).to.eql(\"admin\"); });",
+                  "pm.collectionVariables.set(\"adminId\", pm.response.json().data.user._id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{adminEmail}}\",\n  \"password\": \"{{adminPassword}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Logs in as admin. The JWT is stored in an httpOnly cookie, which Postman's cookie jar re-sends automatically on the next requests."
+          },
+          "response": []
+        },
+        {
+          "name": "View all users",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Response has success = true\", function () { pm.expect(pm.response.json().success).to.eql(true); });",
+                  "pm.test(\"No password / hash / token is exposed in the response\", function () {\n    const text = pm.response.text().toLowerCase();\n    pm.expect(text).to.not.include('\"password\"');\n    pm.expect(text).to.not.include('$2a$');\n    pm.expect(text).to.not.include('$2b$');\n    pm.expect(text).to.not.include('\"token\"');\n});",
+                  "pm.test(\"users is an array\", function () { pm.expect(pm.response.json().data.users).to.be.an(\"array\"); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/users",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "users"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "View users filtered by role",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Response has success = true\", function () { pm.expect(pm.response.json().success).to.eql(true); });",
+                  "pm.test(\"Only employers returned\", function () { pm.response.json().data.users.forEach(u => pm.expect(u.role).to.eql(\"employer\")); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/users?role=employer&limit=5",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "users"
+              ],
+              "query": [
+                {
+                  "key": "role",
+                  "value": "employer"
+                },
+                {
+                  "key": "limit",
+                  "value": "5"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "View user by ID",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Response has success = true\", function () { pm.expect(pm.response.json().success).to.eql(true); });",
+                  "pm.test(\"No password / hash / token is exposed in the response\", function () {\n    const text = pm.response.text().toLowerCase();\n    pm.expect(text).to.not.include('\"password\"');\n    pm.expect(text).to.not.include('$2a$');\n    pm.expect(text).to.not.include('$2b$');\n    pm.expect(text).to.not.include('\"token\"');\n});",
+                  "pm.test(\"Shows activity info\", function () { pm.expect(pm.response.json().data.activity.applicationsSubmitted).to.eql(1); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/users/{{jobSeekerId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "users",
+                "{{jobSeekerId}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "View user by ID - not found (404)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 404\", function () { pm.response.to.have.status(404); });",
+                  "pm.test(\"Response has success = false\", function () { pm.expect(pm.response.json().success).to.eql(false); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/users/000000000000000000000000",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "users",
+                "000000000000000000000000"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Deactivate a user (Job Seeker)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Response has success = true\", function () { pm.expect(pm.response.json().success).to.eql(true); });",
+                  "pm.test(\"User is now inactive\", function () { pm.expect(pm.response.json().data.user.isActive).to.eql(false); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/users/{{jobSeekerId}}/status",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "users",
+                "{{jobSeekerId}}",
+                "status"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"isActive\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update user status - invalid body (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 400\", function () { pm.response.to.have.status(400); });",
+                  "pm.test(\"Response has success = false\", function () { pm.expect(pm.response.json().success).to.eql(false); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/users/{{jobSeekerId}}/status",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "users",
+                "{{jobSeekerId}}",
+                "status"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"isActive\": \"maybe\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Deactivated user cannot log in (403)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 403\", function () { pm.response.to.have.status(403); });",
+                  "pm.test(\"Response has success = false\", function () { pm.expect(pm.response.json().success).to.eql(false); });",
+                  "pm.test(\"Message matches /deactivated/\", function () { pm.expect(pm.response.json().message).to.match(/deactivated/i); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{seekerEmail}}\",\n  \"password\": \"{{testPassword}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Re-activate the user",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Response has success = true\", function () { pm.expect(pm.response.json().success).to.eql(true); });",
+                  "pm.test(\"User is active again\", function () { pm.expect(pm.response.json().data.user.isActive).to.eql(true); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/users/{{jobSeekerId}}/status",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "users",
+                "{{jobSeekerId}}",
+                "status"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"isActive\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Admin cannot deactivate own account (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 400\", function () { pm.response.to.have.status(400); });",
+                  "pm.test(\"Response has success = false\", function () { pm.expect(pm.response.json().success).to.eql(false); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/users/{{adminId}}/status",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "users",
+                "{{adminId}}",
+                "status"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"isActive\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "View all jobs",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Response has success = true\", function () { pm.expect(pm.response.json().success).to.eql(true); });",
+                  "pm.test(\"jobs is an array\", function () { pm.expect(pm.response.json().data.jobs).to.be.an(\"array\"); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/jobs",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "jobs"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "View job by ID",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Response has success = true\", function () { pm.expect(pm.response.json().success).to.eql(true); });",
+                  "pm.test(\"Includes employer details and application count\", function () { const d = pm.response.json().data; pm.expect(d.job.employer).to.have.property(\"email\"); pm.expect(d.applicationsCount).to.eql(1); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/jobs/{{jobId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "jobs",
+                "{{jobId}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "View all applications (platform data)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Response has success = true\", function () { pm.expect(pm.response.json().success).to.eql(true); });",
+                  "pm.test(\"applications is an array\", function () { pm.expect(pm.response.json().data.applications).to.be.an(\"array\"); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/applications",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "applications"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Platform statistics",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Response has success = true\", function () { pm.expect(pm.response.json().success).to.eql(true); });",
+                  "pm.test(\"Has totals for users, jobs and applications\", function () { const t = pm.response.json().data.totals; pm.expect(t).to.have.all.keys(\"users\", \"jobs\", \"applications\"); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/stats",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "stats"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Remove a job posting",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Response has success = true\", function () { pm.expect(pm.response.json().success).to.eql(true); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/jobs/{{jobId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "jobs",
+                "{{jobId}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Removed job is gone (404)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 404\", function () { pm.response.to.have.status(404); });",
+                  "pm.test(\"Response has success = false\", function () { pm.expect(pm.response.json().success).to.eql(false); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/jobs/{{jobId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "jobs",
+                "{{jobId}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Job's application was removed with it (404)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Response has success = true\", function () { pm.expect(pm.response.json().success).to.eql(true); });",
+                  "pm.test(\"Seeker now has 0 applications\", function () { pm.expect(pm.response.json().data.activity.applicationsSubmitted).to.eql(0); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/users/{{jobSeekerId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "users",
+                "{{jobSeekerId}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete user - Job Seeker #1",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Response has success = true\", function () { pm.expect(pm.response.json().success).to.eql(true); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/users/{{jobSeekerId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "users",
+                "{{jobSeekerId}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete user - Job Seeker #2",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Response has success = true\", function () { pm.expect(pm.response.json().success).to.eql(true); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/users/{{jobSeeker2Id}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "users",
+                "{{jobSeeker2Id}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete user - Employer #1",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Response has success = true\", function () { pm.expect(pm.response.json().success).to.eql(true); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/users/{{employerId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "users",
+                "{{employerId}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete user - Employer #2",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Response has success = true\", function () { pm.expect(pm.response.json().success).to.eql(true); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/users/{{employer2Id}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "users",
+                "{{employer2Id}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Deleted user is gone (404)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 404\", function () { pm.response.to.have.status(404); });",
+                  "pm.test(\"Response has success = false\", function () { pm.expect(pm.response.json().success).to.eql(false); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/users/{{employer2Id}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "users",
+                "{{employer2Id}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Admin cannot delete own account (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 400\", function () { pm.response.to.have.status(400); });",
+                  "pm.test(\"Response has success = false\", function () { pm.expect(pm.response.json().success).to.eql(false); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/users/{{adminId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "users",
+                "{{adminId}}"
+              ]
+            }
+          },
+          "response": []
+        }
+      ],
+      "description": "Platform-level access. Every route needs authentication AND the admin role. Ends by cleaning up all test data."
+    },
+    {
+      "name": "08 - Logout & Cookie Removal",
+      "item": [
+        {
+          "name": "Logout (cookie cleared)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Response has success = true\", function () { pm.expect(pm.response.json().success).to.eql(true); });",
+                  "pm.test(\"Set-Cookie clears the token\", function () { const sc = pm.response.headers.get(\"Set-Cookie\") || \"\"; pm.expect(sc).to.include(\"token=;\"); pm.expect(sc).to.include(\"Expires=Thu, 01 Jan 1970\"); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/logout",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "logout"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Protected route after logout (401)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 401\", function () { pm.response.to.have.status(401); });",
+                  "pm.test(\"Response has success = false\", function () { pm.expect(pm.response.json().success).to.eql(false); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/users",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "users"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Profile after logout (401)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 401\", function () { pm.response.to.have.status(401); });",
+                  "pm.test(\"Response has success = false\", function () { pm.expect(pm.response.json().success).to.eql(false); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/users/profile",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "users",
+                "profile"
+              ]
+            }
+          },
+          "response": []
+        }
+      ],
+      "description": "After logout the cookie is gone and protected routes reject the request."
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:5000",
+      "type": "string"
+    },
+    {
+      "key": "jwtSecret",
+      "value": "PASTE_THE_JWT_SECRET_FROM_YOUR_.env_HERE",
+      "type": "string"
+    },
+    {
+      "key": "adminEmail",
+      "value": "admin@jobportal.com",
+      "type": "string"
+    },
+    {
+      "key": "adminPassword",
+      "value": "Admin@12345",
+      "type": "string"
+    },
+    {
+      "key": "testPassword",
+      "value": "Test@1234",
+      "type": "string"
+    },
+    {
+      "key": "runId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "seekerEmail",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "seeker2Email",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "employerEmail",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "employer2Email",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "deadline",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "jobSeekerId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "jobSeeker2Id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "employerId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "employer2Id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "adminId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "jobId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "tempJobId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "applicationId",
+      "value": "",
+      "type": "string"
+    }
+  ]
+}

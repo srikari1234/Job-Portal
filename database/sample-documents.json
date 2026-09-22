@@ -1,0 +1,148 @@
+{
+  "users": [
+    {
+      "_id": {
+        "$oid": "665f1c2e8b1e4a0012a00001"
+      },
+      "name": "Rahul Verma",
+      "email": "seeker@demo.com",
+      "password": "$2b$12$<60-character-bcrypt-hash-never-the-plain-password>",
+      "role": "jobseeker",
+      "isActive": true,
+      "headline": "Full-stack developer",
+      "location": "Hyderabad, India",
+      "skills": [
+        "javascript",
+        "node.js",
+        "mongodb",
+        "react"
+      ],
+      "experience": [
+        {
+          "_id": {
+            "$oid": "665f1c2e8b1e4a0012a00011"
+          },
+          "jobTitle": "Junior Developer",
+          "company": "CodeCraft",
+          "startDate": {
+            "$date": "2023-06-01T00:00:00.000Z"
+          },
+          "endDate": {
+            "$date": "2025-05-31T00:00:00.000Z"
+          },
+          "currentlyWorking": false,
+          "description": "Built REST APIs with Express and MongoDB."
+        }
+      ],
+      "education": [
+        {
+          "_id": {
+            "$oid": "665f1c2e8b1e4a0012a00012"
+          },
+          "degree": "B.Tech",
+          "institution": "JNTU Hyderabad",
+          "fieldOfStudy": "Computer Science",
+          "startYear": 2019,
+          "endYear": 2023
+        }
+      ],
+      "createdAt": {
+        "$date": "2026-09-20T10:00:00.000Z"
+      },
+      "updatedAt": {
+        "$date": "2026-09-20T10:00:00.000Z"
+      }
+    },
+    {
+      "_id": {
+        "$oid": "665f1c2e8b1e4a0012a00002"
+      },
+      "name": "Priya Sharma",
+      "email": "employer@demo.com",
+      "password": "$2b$12$<60-character-bcrypt-hash>",
+      "role": "employer",
+      "isActive": true,
+      "companyName": "TechNova Solutions",
+      "skills": [],
+      "experience": [],
+      "education": []
+    }
+  ],
+  "jobs": [
+    {
+      "_id": {
+        "$oid": "665f1c2e8b1e4a0012a00101"
+      },
+      "title": "Node.js Backend Developer",
+      "companyName": "TechNova Solutions",
+      "description": "Build and maintain REST APIs using Node.js, Express and MongoDB for our SaaS product.",
+      "location": "Hyderabad, India",
+      "employmentType": "full-time",
+      "salaryRange": {
+        "min": 600000,
+        "max": 1200000,
+        "currency": "INR"
+      },
+      "requiredSkills": [
+        "node.js",
+        "express",
+        "mongodb"
+      ],
+      "experienceRequired": {
+        "min": 1,
+        "max": 3
+      },
+      "postedDate": {
+        "$date": "2026-09-20T10:05:00.000Z"
+      },
+      "applicationDeadline": {
+        "$date": "2026-11-04T10:05:00.000Z"
+      },
+      "status": "open",
+      "employer": {
+        "$oid": "665f1c2e8b1e4a0012a00002"
+      }
+    }
+  ],
+  "applications": [
+    {
+      "_id": {
+        "$oid": "665f1c2e8b1e4a0012a00201"
+      },
+      "job": {
+        "$oid": "665f1c2e8b1e4a0012a00101"
+      },
+      "applicant": {
+        "$oid": "665f1c2e8b1e4a0012a00001"
+      },
+      "coverLetter": "I enjoy building REST APIs and would love to join TechNova.",
+      "resumeUrl": "https://example.com/resume/rahul-verma.pdf",
+      "expectedSalary": 900000,
+      "status": "shortlisted",
+      "statusHistory": [
+        {
+          "status": "applied",
+          "changedBy": {
+            "$oid": "665f1c2e8b1e4a0012a00001"
+          },
+          "changedAt": {
+            "$date": "2026-09-20T10:10:00.000Z"
+          }
+        },
+        {
+          "status": "shortlisted",
+          "changedBy": {
+            "$oid": "665f1c2e8b1e4a0012a00002"
+          },
+          "changedAt": {
+            "$date": "2026-09-21T09:00:00.000Z"
+          },
+          "note": "Strong Node.js background"
+        }
+      ],
+      "appliedAt": {
+        "$date": "2026-09-20T10:10:00.000Z"
+      }
+    }
+  ]
+}
